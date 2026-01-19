@@ -1,0 +1,14 @@
+# Security: NEVER commit secrets!
+.env
+
+# Dependencies
+node_modules/
+
+# Build files
+artifacts/
+cache/
+typechain/
+
+# Hardhat local files
+coverage/
+coverage.json

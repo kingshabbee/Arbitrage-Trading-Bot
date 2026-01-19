@@ -1,0 +1,29 @@
+{
+  "name": "profitable-flash-bot",
+  "version": "1.0.0",
+  "description": "Arbitrage Flash Loan Bot for Arbitrum",
+  "main": "bot/index.js",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "deploy": "npx hardhat run scripts/deploy.js --network arbitrum",
+    "start": "node bot/index.js",
+    "test": "npx hardhat test"
+  },
+  "keywords": [
+    "arbitrage",
+    "flashloan",
+    "bot",
+    "arbitrum"
+  ],
+  "author": "Shinabaze",
+  "license": "MIT",
+  "devDependencies": {
+    "@balancer-labs/v2-interfaces": "^0.1.0",
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+    "dotenv": "^17.2.3",
+    "hardhat": "^2.17.0"
+  },
+  "dependencies": {
+    "ethers": "^6.7.1"
+  }
+}
