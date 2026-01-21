@@ -1,19 +1,21 @@
 module.exports = {
-    // 1. DEPLOYED CONTRACT (Update this after you deploy!)
-    BOT_CONTRACT_ADDRESS: "PASTE_YOUR_DEPLOYED_CONTRACT_ADDRESS_HERE", 
+    // 1. YOUR CONTRACT ADDRESS (Keep your existing one)
+    BOT_CONTRACT_ADDRESS: "0x80F440170feCd23D18DD78687fD2F121f5aA7EDD", 
 
-    // 2. ARBITRUM MAINNET TOKENS
-    ARB_TOKEN: "0x912CE59144191C1204E64559FE8253a0e49E6548",
-    USDC_TOKEN: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", // Native USDC
+    // 2. TOKENS 
+    // WETH 
+    FLASH_TOKEN: "0x82af49447d8a07e3bd95bd0d56f35241523fbab1", 
+    
+    // BRIDGED USDC (Liquidity exists on Camelot V2)
+    USDC_TOKEN: "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8", 
 
-    // 3. ARBITRUM MAINNET ROUTERS (V2 Compatible)
-    // SushiSwap V2
-    SUSHI_ROUTER: "0x1b02dA8Cb0d097eB8D57A175b88c7D875799e564", 
-    // Camelot V2
-    CAMELOT_ROUTER: "0xc873fEcbd354f5A56E00E710B90EF4201db2448d",
+    // 3. ROUTERS (THE TRICK)
+    // We put the CAMELOT address in BOTH slots to verify the code runs.
+    SUSHI_ROUTER:   "0xc873fecbd354f5a56e00e710b90ef4201db2448d", // <--- Using Camelot address here
+    CAMELOT_ROUTER: "0xc873fecbd354f5a56e00e710b90ef4201db2448d",
 
     // 4. SETTINGS
-    BORROW_AMOUNT: "1000000", // 1 Million ARB
-    MIN_PROFIT_USD: 50,       // $50 Target
-    GAS_LIMIT: 2000000        // Gas limit for transaction
+    BORROW_AMOUNT: "0.1", 
+    MIN_PROFIT_USD: 0.0001,       
+    GAS_LIMIT: 2000000        
 };

@@ -3,116 +3,101 @@ require('dotenv').config();
 const config = require('./config');
 const botAbi = require('./abi.json'); 
 
-// V2 Router Interface for price checking (getAmountsOut)
 const ROUTER_ABI = [
     "function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory amounts)"
 ];
 
-const provider = new ethers.JsonRpcProvider(process.env.ARB_RPC_URL);
+const provider = new ethers.JsonRpcProvider(process.env.TENDERLY_RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
-// Contracts
 const botContract = new ethers.Contract(config.BOT_CONTRACT_ADDRESS, botAbi, wallet);
 const sushiRouter = new ethers.Contract(config.SUSHI_ROUTER, ROUTER_ABI, provider);
 const camelotRouter = new ethers.Contract(config.CAMELOT_ROUTER, ROUTER_ABI, provider);
 
-// Formatter Helpers
 const toBigInt = (amount) => ethers.parseUnits(amount.toString(), 18);
 const fromBigInt = (amount) => ethers.formatUnits(amount, 18);
 
-console.log("Arbitrage Bot Started...");
-console.log(`Wallet: ${wallet.address}`);
-console.log(`Targeting $${config.MIN_PROFIT_USD} profit on ${config.BORROW_AMOUNT} ARB loan.`);
+console.log("--- DEBUGGING CONNECTIONS ---");
+console.log(`Token A (Flash): ${config.FLASH_TOKEN}`);
+console.log(`Token B (USDC):  ${config.USDC_TOKEN}`);
+console.log(`Sushi Router:    ${config.SUSHI_ROUTER}`);
 
 const runBot = async () => {
-    
-    // 1. Setup Amounts & Paths
     const amountIn = toBigInt(config.BORROW_AMOUNT);
-    const pathForward = [config.ARB_TOKEN, config.USDC_TOKEN];
-    const pathBackward = [config.USDC_TOKEN, config.ARB_TOKEN];
+    const pathForward = [config.FLASH_TOKEN, config.USDC_TOKEN];
+    const pathBackward = [config.USDC_TOKEN, config.FLASH_TOKEN];
 
-    // 2. Define our pair directions
     const pairs = [
         { name: "Sushi -> Camelot", routerIn: sushiRouter, routerOut: camelotRouter, addressIn: config.SUSHI_ROUTER, addressOut: config.CAMELOT_ROUTER },
         { name: "Camelot -> Sushi", routerIn: camelotRouter, routerOut: sushiRouter, addressIn: config.CAMELOT_ROUTER, addressOut: config.SUSHI_ROUTER }
     ];
 
-    provider.on("block", async (blockNumber) => {
+    const scanMarket = async () => {
         try {
-            console.log(`Scanning Block: ${blockNumber}...`);
+            console.log(`\nScanning Block: ${await provider.getBlockNumber()}...`);
 
             for (const pair of pairs) {
-                // --- STEP A: Check Price on Router 1 (Sell ARB, Buy USDC) ---
+                // STEP A
                 let amountsOutA;
                 try {
+                    // We try to call the router here
                     amountsOutA = await pair.routerIn.getAmountsOut(amountIn, pathForward);
-                } catch (e) {
-                    // Sometimes pools don't have enough liquidity and revert reading price
+                } catch (e) { 
+                    // <--- THIS IS THE NEW DEBUG PART
+                    console.log(`[CRITICAL ERROR] ${pair.name} Step A Failed!`);
+                    console.log(`Reason: ${e.code || "Unknown Code"}`);
+                    console.log(`Message: ${e.shortMessage || e.message}`);
                     continue; 
                 }
                 const amountUSDC = amountsOutA[1];
 
-                // --- STEP B: Check Price on Router 2 (Sell USDC, Buy ARB) ---
+                // STEP B
                 let amountsOutB;
                 try {
                     amountsOutB = await pair.routerOut.getAmountsOut(amountUSDC, pathBackward);
                 } catch (e) {
+                    console.log(`[CRITICAL ERROR] ${pair.name} Step B Failed!`);
+                    console.log(`Message: ${e.shortMessage || e.message}`);
                     continue;
                 }
                 const amountFinal = amountsOutB[1];
 
-                // --- STEP C: Calculate Profit ---
+                // Profit Calc
                 const profitWei = amountFinal - amountIn; 
+                const profitEth = parseFloat(fromBigInt(profitWei));
                 
                 if (profitWei > 0n) {
-                    const profitArb = parseFloat(fromBigInt(profitWei));
-                    // We assume 1 ARB ~= $1 USD for simplicity. 
-                    const minProfitArb = config.MIN_PROFIT_USD; 
-
-                    console.log(`[${pair.name}] Potential: +${profitArb.toFixed(4)} ARB`);
-
-                    // --- STEP D: Execution Decision ---
-                    if (profitArb >= minProfitArb) {
-                        console.log("!!! PROFIT TARGET HIT - STARTING SIMULATION !!!");
-                        
-                        // 1. SIMULATE (staticCall)
-                        // This checks if the transaction succeeds WITHOUT spending gas
-                        try {
-                            await botContract.executeArbitrage.staticCall(
-                                amountIn,
-                                pair.addressIn,
-                                pair.addressOut,
-                                config.USDC_TOKEN,
-                                ethers.parseUnits(minProfitArb.toString(), 18)
-                            );
-                            
-                            console.log(">>> SIMULATION PASSED! Sending Real Transaction...");
-
-                            // 2. EXECUTE (Real Money)
+                    console.log(`[${pair.name}] PROFIT: +${profitEth.toFixed(6)} WETH`);
+                    if (profitEth >= 0) { 
+                         console.log("!!! EXECUTING TRADE !!!");
+                         try {
                             const tx = await botContract.executeArbitrage(
+                                config.FLASH_TOKEN, 
                                 amountIn,
                                 pair.addressIn,
                                 pair.addressOut,
                                 config.USDC_TOKEN,
-                                ethers.parseUnits(minProfitArb.toString(), 18),
+                                ethers.parseUnits("0", 18),
                                 { gasLimit: config.GAS_LIMIT }
                             );
-
-                            console.log(`Tx Sent: ${tx.hash}`);
                             await tx.wait();
-                            console.log("$$$ Transaction Confirmed! Profit Secured $$$");
-
-                        } catch (simError) {
-                            console.log("XXX SIMULATION FAILED: Transaction would revert. Skipping.");
-                            // console.log(simError.reason); // Uncomment to see exact revert reason
-                        }
+                            console.log("Trade Success!");
+                         } catch (err) {
+                             console.log("Reverted (Expected):", err.message);
+                         }
                     }
+                } else {
+                    console.log(`[${pair.name}] Loss: ${profitEth.toFixed(6)} WETH`);
                 }
             }
         } catch (e) {
-            console.error("Scan loop error:", e.message);
+            console.error("Global Error:", e.message);
         }
-    });
+    };
+
+    scanMarket();
+    // Increase time to 10 seconds to avoid spamming errors
+    setInterval(scanMarket, 10000); 
 };
 
 runBot();
